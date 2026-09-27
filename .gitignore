@@ -1,0 +1,4 @@
+# build output (the exe is published as a GitHub release asset, the icon is extracted at build time)
+dist/
+*.exe
+*.ico
