@@ -1,4 +1,3 @@
-# build output (the exe is published as a GitHub release asset, the icon is extracted at build time)
+# build output (the exe is published as a GitHub release asset)
 dist/
 *.exe
-*.ico

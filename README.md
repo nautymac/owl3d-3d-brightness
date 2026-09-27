@@ -90,8 +90,8 @@ Windows에 들어 있는 C# 컴파일러만 있으면 됩니다.
 powershell -ExecutionPolicy Bypass -File build.ps1
 ```
 
-결과물은 `dist\Owl3DBrightness.exe`입니다. 아이콘 파일은 저장소에 없고, 빌드할 때 이 PC에 설치된 Owl3D에서 가져옵니다.
-Owl3D가 설치돼 있지 않으면 Windows 기본 아이콘으로 빌드됩니다.
+결과물은 `dist\Owl3DBrightness.exe`입니다. 아이콘(`src\app.ico`)은 직접 그린 그림이고, 디자인을 바꾸려면
+`tools\IconArt.cs`를 고친 뒤 `tools\make-icon.ps1`을 실행하면 다시 만들어집니다.
 
 ---
 
