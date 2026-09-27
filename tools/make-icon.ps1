@@ -6,5 +6,5 @@ $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ico  = Join-Path (Split-Path -Parent $here) 'src\app.ico'
 Add-Type -Path (Join-Path $here 'IconArt.cs') -ReferencedAssemblies System.Drawing
-[IconArt]::SaveIco('cool', $ico)
+[IconArt]::SaveIco('cream', $ico)   # other variants in IconArt.cs: white, sky, cool, warm
 Write-Host "written: $ico ($((Get-Item $ico).Length) bytes)"
