@@ -294,26 +294,32 @@ class MainForm : Form
         // a previous run ended (crash / power off) while saturation was applied: put the original level back
         if (Nv.Available && s.SatRestore >= 0 && !Ramp.Is3DOn()) { Nv.Set(s.SatRestore); Log("startup: restored saturation " + s.SatRestore); s.SatRestore = -1; s.Save(); }
         Text = T.L("Owl3D 3D 밝기 조절", "Owl3D 3D Brightness"); TopMost = true; StartPosition = FormStartPosition.Manual;
-        Location = new Point(40, 40); ClientSize = new Size(540, 448); FormBorderStyle = FormBorderStyle.FixedToolWindow;
+        Location = new Point(40, 40); ClientSize = new Size(640, 448); FormBorderStyle = FormBorderStyle.FixedToolWindow;
         Font = new Font(T.L("Malgun Gothic", "Segoe UI"), T.Ko ? 10f : 9.5f);
 
-        lg = new Label { Location = new Point(12, 12), Size = new Size(516,22) }; Controls.Add(lg);
-        tg = new TrackBar { Location = new Point(12, 36), Size = new Size(516,45), Minimum = 50, Maximum = 250, TickFrequency = 10, SmallChange = 1, LargeChange = 5 };
+        lg = new Label { Location = new Point(12, 12), Size = new Size(440,22) }; Controls.Add(lg);
+        tg = new TrackBar { Location = new Point(12, 36), Size = new Size(616,45), Minimum = 50, Maximum = 250, TickFrequency = 10, SmallChange = 1, LargeChange = 5 };
         tg.Value = Clamp((int)Math.Round(s.Gamma * 100), 50, 250); Controls.Add(tg);
-        lk = new Label { Location = new Point(12, 88), Size = new Size(516,22) }; Controls.Add(lk);
-        tk = new TrackBar { Location = new Point(12, 112), Size = new Size(516,45), Minimum = 100, Maximum = 200, TickFrequency = 10, SmallChange = 1, LargeChange = 5 };
+        lk = new Label { Location = new Point(12, 88), Size = new Size(440,22) }; Controls.Add(lk);
+        tk = new TrackBar { Location = new Point(12, 112), Size = new Size(616,45), Minimum = 100, Maximum = 200, TickFrequency = 10, SmallChange = 1, LargeChange = 5 };
         tk.Value = Clamp((int)Math.Round(Math.Max(1.0, s.Gain) * 100), 100, 200); Controls.Add(tk);
-        lc = new Label { Location = new Point(12, 240), Size = new Size(516,22) }; Controls.Add(lc);
-        tc = new TrackBar { Location = new Point(12, 264), Size = new Size(516,45), Minimum = 50, Maximum = 150, TickFrequency = 10, SmallChange = 1, LargeChange = 5 };
+        lc = new Label { Location = new Point(12, 240), Size = new Size(440,22) }; Controls.Add(lc);
+        tc = new TrackBar { Location = new Point(12, 264), Size = new Size(616,45), Minimum = 50, Maximum = 150, TickFrequency = 10, SmallChange = 1, LargeChange = 5 };
         tc.Value = Clamp((int)Math.Round(s.Contrast * 100), 50, 150); Controls.Add(tc);
-        ls = new Label { Location = new Point(12, 164), Size = new Size(516,22) }; Controls.Add(ls);
-        ts = new TrackBar { Location = new Point(12, 188), Size = new Size(516,45), Minimum = Nv.Min, Maximum = Nv.Max, TickFrequency = 10, SmallChange = 1, LargeChange = 5, Enabled = Nv.Available };
+        ls = new Label { Location = new Point(12, 164), Size = new Size(440,22) }; Controls.Add(ls);
+        ts = new TrackBar { Location = new Point(12, 188), Size = new Size(616,45), Minimum = Nv.Min, Maximum = Nv.Max, TickFrequency = 10, SmallChange = 1, LargeChange = 5, Enabled = Nv.Available };
         ts.Value = Clamp(s.Sat, ts.Minimum, ts.Maximum); Controls.Add(ts);
-        st = new Label { Location = new Point(12, 316), Size = new Size(516,48) }; Controls.Add(st);
-        var bOff = new Button { Text = T.L("보정 끄기", "Off"), Location = new Point(12, 372), Size = new Size(130, 30) }; Controls.Add(bOff);
-        var bDef = new Button { Text = T.L("기본값", "Default"), Location = new Point(150, 372), Size = new Size(130, 30) }; Controls.Add(bDef);
-        var bSave = new Button { Text = T.L("현재 값을 기본값으로 저장", "Save current as default"), Location = new Point(288, 372), Size = new Size(240, 30) }; Controls.Add(bSave);
+        st = new Label { Location = new Point(12, 316), Size = new Size(616,48) }; Controls.Add(st);
+        // shortcut hints, right-aligned on each title row
+        string[] keys = { "Ctrl+Alt+ ]  /  [", "Ctrl+Alt+ =  /  -", "Ctrl+Alt+ .  /  ,", "Ctrl+Alt+ '  /  ;" };
+        int[] rows = { 12, 88, 164, 240 };
+        for (int i = 0; i < 4; i++)
+            Controls.Add(new Label { Text = keys[i], Location = new Point(452, rows[i]), Size = new Size(176, 22), TextAlign = ContentAlignment.TopRight, ForeColor = Color.DimGray });
+        var bOff = new Button { Text = T.L("보정 끄기  (Ctrl+Alt+0)", "Off  (Ctrl+Alt+0)"), Location = new Point(12, 372), Size = new Size(190, 30) }; Controls.Add(bOff);
+        var bDef = new Button { Text = T.L("기본값  (Ctrl+Alt+9)", "Default  (Ctrl+Alt+9)"), Location = new Point(210, 372), Size = new Size(190, 30) }; Controls.Add(bDef);
+        var bSave = new Button { Text = T.L("현재 값을 기본값으로 저장", "Save current as default"), Location = new Point(408, 372), Size = new Size(220, 30) }; Controls.Add(bSave);
         bSave.Click += (o, e) => SaveAsDefault();
+        Controls.Add(new Label { Text = T.L("이 창 열기 / 숨기기:  Ctrl+Alt+B", "Show / hide this window:  Ctrl+Alt+B"), Location = new Point(330, 414), Size = new Size(298, 22), TextAlign = ContentAlignment.TopRight, ForeColor = Color.DimGray });
         var cAuto = new CheckBox { Text = T.L("로그인 시 자동 실행", "Start at login"), Location = new Point(14, 412), Size = new Size(300, 24), Checked = IsAutoStart() }; Controls.Add(cAuto);
         cAuto.CheckedChanged += (o, e) => SetAutoStart(cAuto.Checked);
         bOff.Click += (o, e) => SetAll(100, 100, 100, Nv.Default);
