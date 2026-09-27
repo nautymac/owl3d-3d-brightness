@@ -9,6 +9,32 @@ The window is Korean on a Korean Windows and English otherwise.
 
 Owl3D 프로그램 자체는 건드리지 않습니다. Owl3D와 관련 없는 개인 도구이며 Owl3D 회사가 만들거나 지원하는 것이 아닙니다.
 
+[English](#english)
+
+## 왜 필요한가
+
+Owl3D Shift는 Live 3D를 켜면 흰색은 그대로인데 중간 밝기가 눈에 띄게 어두워집니다. 영상과 사진이 칙칙하게 보이고,
+모니터 밝기를 끝까지 올려도 해결되지 않습니다. 그렇다고 Windows나 그래픽 설정에서 밝기를 올려 두면 3D를 끈 평소 화면이
+너무 밝고 뿌옇게 됩니다. 이 프로그램은 **3D가 켜진 동안에만** 보정을 걸어서 두 상태를 모두 보기 좋게 유지합니다.
+
+## 기능
+
+| 기능 | 설명 |
+|---|---|
+| 3D 자동 감지 | Live 3D가 켜지면 보정을 적용하고, 꺼지면 원래 화면으로 되돌립니다. 직접 켜고 끌 필요가 없습니다. |
+| 감마 | 중간 밝기를 올리거나 내립니다. 흰색과 검정은 그대로 둡니다. |
+| 밝기 배율 | 화면 전체를 배수로 밝게 합니다. 검정은 검정으로 남아 뿌옇게 뜨지 않습니다. |
+| 색 진하기(채도) | 색을 진하게 또는 옅게 합니다. NVIDIA 그래픽에서 동작합니다. |
+| 대비 | 밝은 곳과 어두운 곳의 차이를 조절합니다. |
+| 실시간 조절 | 슬라이더를 움직이면 3D 화면을 보면서 바로 결과를 확인할 수 있습니다. |
+| 전역 단축키 | 영상이나 게임이 전체화면이어도 단축키로 조절합니다. 누르면 현재 값이 화면에 잠깐 표시됩니다. |
+| 내 기본값 저장 | 마음에 드는 값을 기본값으로 저장해 두고, 버튼이나 단축키 하나로 되돌립니다. |
+| 값 유지 | 조절한 값은 저장되어 다음 실행에도 그대로 적용됩니다. |
+| 트레이 상주 | 창을 닫아도 트레이에서 계속 동작합니다. 로그인 시 자동 실행을 켤 수 있습니다. |
+| 안전한 복구 | 보정이 걸린 채 PC가 꺼지거나 프로그램이 종료돼도 다음 실행 때 원래 화면으로 되돌립니다. |
+| 한국어 / 영어 | Windows 표시 언어에 맞춰 자동으로 바뀝니다. |
+| 설치 불필요 | exe 파일 하나입니다. 아무 폴더에 두고 실행하면 됩니다. |
+
 ## 사용법
 
 1. [Releases](../../releases)에서 `Owl3DBrightness.exe`를 받아 아무 폴더에나 둡니다. 설치 과정은 없습니다.
@@ -66,3 +92,57 @@ powershell -ExecutionPolicy Bypass -File build.ps1
 
 결과물은 `dist\Owl3DBrightness.exe`입니다. 아이콘 파일은 저장소에 없고, 빌드할 때 이 PC에 설치된 Owl3D에서 가져옵니다.
 Owl3D가 설치돼 있지 않으면 Windows 기본 아이콘으로 빌드됩니다.
+
+---
+
+## English
+
+**Owl3D 3D Brightness** is a small tray tool for the Owl3D Shift display. Not made or supported by Owl3D.
+
+### Why
+
+With Live 3D on, the Shift keeps white as it is but shows midtones noticeably darker, so video and photos look dull even
+with the backlight at maximum. Raising brightness in Windows or the graphics driver instead makes the normal 2D desktop too
+bright and washed out. This tool applies its correction **only while 3D is running**.
+
+### Features
+
+| Feature | Description |
+|---|---|
+| Automatic 3D detection | Applies when Live 3D starts and restores the original picture when it stops. |
+| Gamma | Raises or lowers midtones; white and black stay where they are. |
+| Gain | Multiplies overall brightness; black stays black. |
+| Saturation | More vivid or paler colours. Works on NVIDIA graphics. |
+| Contrast | Difference between light and dark. |
+| Live adjustment | Move a slider and see the result on the 3D screen immediately. |
+| Global hotkeys | Work while a video or game is fullscreen; the current values appear briefly on screen. |
+| Your own default | Save the current values as the default preset and recall it with one button or hotkey. |
+| Remembers values | Settings are kept for the next run. |
+| Tray app | Keeps running after the window is closed; optional start at login. |
+| Safe restore | If the PC shuts down while the correction is active, the original picture is restored at next start. |
+| Korean / English | Follows the Windows display language. |
+| No installer | A single exe. |
+
+### Use
+
+Download `Owl3DBrightness.exe` from [Releases](../../releases), put it anywhere and run it. Start Live 3D in Owl3D;
+the correction is applied 4–5 seconds later and removed 2–3 seconds after 3D stops.
+
+| Keys | Action |
+|---|---|
+| `Ctrl`+`Alt`+`B` | Show / hide the window |
+| `Ctrl`+`Alt`+`]` / `[` | Gamma +0.05 / −0.05 |
+| `Ctrl`+`Alt`+`=` / `-` | Gain +0.05 / −0.05 |
+| `Ctrl`+`Alt`+`.` / `,` | Saturation +5 / −5 |
+| `Ctrl`+`Alt`+`'` / `;` | Contrast +0.05 / −0.05 |
+| `Ctrl`+`Alt`+`9` | Default preset |
+| `Ctrl`+`Alt`+`0` | Off |
+
+### Notes
+
+- Windows refuses corrections that are too far from the original. If gamma, gain and contrast are all raised a lot, the
+  window shows a red warning and nothing is applied; move one of them back towards 1.00.
+- Saturation needs an NVIDIA output. On other graphics the slider is disabled.
+- The correction covers the whole screen, not only the video area.
+- Settings: `%LOCALAPPDATA%\Owl3D\owl3d-3d-brightness.ini`. Options: `--hidden`, `--lang en`, `--lang ko`.
+- Requires Windows 10/11 (.NET Framework 4, included with Windows).
