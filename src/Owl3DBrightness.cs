@@ -4,6 +4,7 @@
 // Settings: %LOCALAPPDATA%\Owl3D\owl3d-3d-brightness.ini   (so the exe can live anywhere)
 // Build:    csc.exe /target:winexe /out:Owl3DBrightness.exe Owl3DBrightness.cs
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
@@ -281,6 +282,73 @@ static class Nv
     }
 }
 
+// Software power button for the Shift (it has no physical one): DDC/CI power mode, VCP code 0xD6.
+// 1 = on, 4 = off. While off the panel still answers DDC, so the same hotkey turns it back on.
+static class ShiftPower
+{
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] struct PM { public IntPtr h; [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string d; }
+    [StructLayout(LayoutKind.Sequential)] struct RECT { public int L, T, R, B; }
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] struct MONITORINFOEX { public int cb; public RECT mon, work; public int flags; [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dev; }
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    struct DISPLAY_DEVICE
+    {
+        public int cb; [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string name; [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string str;
+        public int flags; [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string id; [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string key;
+    }
+    delegate bool MonProc(IntPtr hm, IntPtr hdc, ref RECT r, IntPtr data);
+    [DllImport("user32.dll")] static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr clip, MonProc cb, IntPtr data);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern bool GetMonitorInfo(IntPtr hm, ref MONITORINFOEX mi);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern bool EnumDisplayDevices(string dev, uint i, ref DISPLAY_DEVICE dd, uint flags);
+    [DllImport("dxva2.dll")] static extern bool GetNumberOfPhysicalMonitorsFromHMONITOR(IntPtr hm, out uint n);
+    [DllImport("dxva2.dll")] static extern bool GetPhysicalMonitorsFromHMONITOR(IntPtr hm, uint n, [Out] PM[] a);
+    [DllImport("dxva2.dll")] static extern bool DestroyPhysicalMonitors(uint n, PM[] a);
+    [DllImport("dxva2.dll")] static extern bool GetVCPFeatureAndVCPFeatureReply(IntPtr h, byte vcp, IntPtr t, out uint cur, out uint mx);
+    [DllImport("dxva2.dll")] static extern bool SetVCPFeature(IntPtr h, byte vcp, uint v);
+
+    // true when one of the monitors on this output is a Shift (RTK2700 / RTK0143) and is the active one
+    static bool IsShift(IntPtr hm)
+    {
+        var mi = new MONITORINFOEX(); mi.cb = Marshal.SizeOf(typeof(MONITORINFOEX));
+        if (!GetMonitorInfo(hm, ref mi)) return false;
+        for (uint i = 0; i < 8; i++)
+        {
+            var dd = new DISPLAY_DEVICE(); dd.cb = Marshal.SizeOf(typeof(DISPLAY_DEVICE));
+            if (!EnumDisplayDevices(mi.dev, i, ref dd, 0)) break;
+            bool active = (dd.flags & 1) != 0;
+            if (active && dd.id != null && (dd.id.IndexOf("RTK2700", StringComparison.OrdinalIgnoreCase) >= 0 || dd.id.IndexOf("RTK0143", StringComparison.OrdinalIgnoreCase) >= 0)) return true;
+        }
+        return false;
+    }
+
+    // Returns: 1 = turned on, 0 = turned off, -1 = no monitor accepted the command.
+    public static int Toggle(out string detail)
+    {
+        var shift = new List<PM>(); var other = new List<PM>(); var all = new List<PM[]>();
+        EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, (IntPtr hm, IntPtr hdc, ref RECT r, IntPtr d) =>
+        {
+            uint n; if (!GetNumberOfPhysicalMonitorsFromHMONITOR(hm, out n) || n == 0) return true;
+            var a = new PM[n]; if (!GetPhysicalMonitorsFromHMONITOR(hm, n, a)) return true;
+            all.Add(a); bool isShift = IsShift(hm);
+            foreach (var m in a) { uint c, x; if (GetVCPFeatureAndVCPFeatureReply(m.h, 0xD6, IntPtr.Zero, out c, out x)) (isShift ? shift : other).Add(m); }
+            return true;
+        }, IntPtr.Zero);
+
+        // prefer a monitor identified as the Shift; otherwise fall back to the only DDC-capable monitor
+        var targets = shift.Count > 0 ? shift : (other.Count == 1 ? other : new List<PM>());
+        int result = -1; detail = "shift=" + shift.Count + " other=" + other.Count;
+        foreach (var m in targets)
+        {
+            uint cur, mx; GetVCPFeatureAndVCPFeatureReply(m.h, 0xD6, IntPtr.Zero, out cur, out mx);
+            uint want = cur == 1 ? 4u : 1u;
+            bool ok = SetVCPFeature(m.h, 0xD6, want);
+            detail += " D6 " + cur + "->" + want + " ok=" + ok;
+            if (ok) result = want == 1 ? 1 : 0;
+        }
+        foreach (var a in all) DestroyPhysicalMonitors((uint)a.Length, a);
+        return result;
+    }
+}
+
 class MainForm : Form
 {
     const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run", RunName = "Owl3D3DBrightness";
@@ -294,7 +362,7 @@ class MainForm : Form
         // a previous run ended (crash / power off) while saturation was applied: put the original level back
         if (Nv.Available && s.SatRestore >= 0 && !Ramp.Is3DOn()) { Nv.Set(s.SatRestore); Log("startup: restored saturation " + s.SatRestore); s.SatRestore = -1; s.Save(); }
         Text = T.L("Owl3D 3D 밝기 조절", "Owl3D 3D Brightness"); TopMost = true; StartPosition = FormStartPosition.Manual;
-        Location = new Point(40, 40); ClientSize = new Size(560, 448); FormBorderStyle = FormBorderStyle.FixedToolWindow;
+        Location = new Point(40, 40); ClientSize = new Size(560, 488); FormBorderStyle = FormBorderStyle.FixedToolWindow;
         Font = new Font(T.L("Malgun Gothic", "Segoe UI"), T.Ko ? 10f : 9.5f);
 
         lg = new Label { Location = new Point(12, 12), Size = new Size(536,22) }; Controls.Add(lg);
@@ -320,6 +388,8 @@ class MainForm : Form
         var bSave = new Button { Text = T.L("현재 값을 기본값으로 저장", "Save current as default"), Location = new Point(368, 372), Size = new Size(180, 30) }; Controls.Add(bSave);
         bSave.Click += (o, e) => SaveAsDefault();
         Controls.Add(new Label { Text = T.L("이 창 열기 / 숨기기:  Ctrl+Alt+B", "Show / hide this window:  Ctrl+Alt+B"), Location = new Point(250, 414), Size = new Size(298, 22), TextAlign = ContentAlignment.TopRight, ForeColor = Color.DimGray });
+        var bPower = new Button { Text = T.L("Shift 화면 끄기 / 켜기  (Ctrl+Alt+P)", "Shift screen off / on  (Ctrl+Alt+P)"), Location = new Point(12, 446), Size = new Size(536, 30) }; Controls.Add(bPower);
+        bPower.Click += (o, e) => TogglePower();
         var cAuto = new CheckBox { Text = T.L("로그인 시 자동 실행", "Start at login"), Location = new Point(14, 412), Size = new Size(230, 24), Checked = IsAutoStart() }; Controls.Add(cAuto);
         cAuto.CheckedChanged += (o, e) => SetAutoStart(cAuto.Checked);
         bOff.Click += (o, e) => SetAll(100, 100, 100, Nv.Default);
@@ -342,6 +412,7 @@ class MainForm : Form
         tray = new NotifyIcon { Icon = appIcon, Visible = true, Text = T.L("Owl3D 3D 밝기", "Owl3D 3D Brightness") };
         var menu = new ContextMenu();
         menu.MenuItems.Add(T.L("조절 창 열기", "Open controls"), (o, e) => ShowWindow());
+        menu.MenuItems.Add(T.L("Shift 화면 끄기 / 켜기  (Ctrl+Alt+P)", "Shift screen off / on  (Ctrl+Alt+P)"), (o, e) => TogglePower());
         menu.MenuItems.Add(T.L("종료", "Exit"), (o, e) => { reallyExit = true; Close(); });
         tray.ContextMenu = menu; tray.DoubleClick += (o, e) => ShowWindow();
 
@@ -373,7 +444,14 @@ class MainForm : Form
     // ---- global hotkeys: Ctrl+Alt+= / -  gain,  Ctrl+Alt+] / [  gamma,  Ctrl+Alt+0 off,  Ctrl+Alt+9 default ----
     Osd osd = new Osd();
     const int HK_GAIN_UP = 1, HK_GAIN_DN = 2, HK_GAMMA_UP = 3, HK_GAMMA_DN = 4, HK_OFF = 5, HK_DEF = 6, HK_WIN = 7,
-              HK_CON_UP = 8, HK_CON_DN = 9, HK_SAT_UP = 10, HK_SAT_DN = 11, HK_LAST = 11;
+              HK_CON_UP = 8, HK_CON_DN = 9, HK_SAT_UP = 10, HK_SAT_DN = 11, HK_POWER = 12, HK_LAST = 12;
+    void TogglePower()
+    {
+        string detail; int r = ShiftPower.Toggle(out detail);
+        Log("power toggle: " + r + " (" + detail + ")");
+        if (r == 1) osd.ShowText(T.L("Shift 화면 켜짐", "Shift screen on"));
+        else if (r < 0) osd.ShowText(T.L("Shift 화면을 찾지 못했습니다", "Shift screen not found"));
+    }
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
@@ -385,6 +463,7 @@ class MainForm : Form
                & Native.RegisterHotKey(Handle, HK_OFF, m, 0x30)       // 0
                & Native.RegisterHotKey(Handle, HK_DEF, m, 0x39)       // 9
                & Native.RegisterHotKey(Handle, HK_WIN, m, 0x42)       // B : show/hide this window
+               & Native.RegisterHotKey(Handle, HK_POWER, m, 0x50)     // P : Shift screen off / on
                & Native.RegisterHotKey(Handle, HK_CON_UP, m, 0xDE)    // VK_OEM_7     (')
                & Native.RegisterHotKey(Handle, HK_CON_DN, m, 0xBA)    // VK_OEM_1     (;)
                & Native.RegisterHotKey(Handle, HK_SAT_UP, m, 0xBE)    // VK_OEM_PERIOD (.)
@@ -396,6 +475,7 @@ class MainForm : Form
         if (msg.Msg == Native.WM_HOTKEY)
         {
             if ((int)msg.WParam == HK_WIN) { if (Visible) Hide(); else ShowWindow(); return; }
+            if ((int)msg.WParam == HK_POWER) { TogglePower(); return; }
             switch ((int)msg.WParam)
             {
                 case HK_GAIN_UP: tk.Value = Clamp(tk.Value + 5, tk.Minimum, tk.Maximum); break;

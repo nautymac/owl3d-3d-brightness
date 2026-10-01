@@ -32,6 +32,7 @@ Owl3D Shift는 Live 3D를 켜면 흰색은 그대로인데 중간 밝기가 눈�
 | 값 유지 | 조절한 값은 저장되어 다음 실행에도 그대로 적용됩니다. |
 | 트레이 상주 | 창을 닫아도 트레이에서 계속 동작합니다. 로그인 시 자동 실행을 켤 수 있습니다. |
 | 안전한 복구 | 보정이 걸린 채 PC가 꺼지거나 프로그램이 종료돼도 다음 실행 때 원래 화면으로 되돌립니다. |
+| 화면 끄기 / 켜기 | Shift에는 전원 버튼이 없습니다. 단축키나 버튼으로 화면을 끄고 다시 켭니다. |
 | 한국어 / 영어 | Windows 표시 언어에 맞춰 자동으로 바뀝니다. |
 | 설치 불필요 | exe 파일 하나입니다. 아무 폴더에 두고 실행하면 됩니다. |
 
@@ -60,6 +61,7 @@ Owl3D Shift는 Live 3D를 켜면 흰색은 그대로인데 중간 밝기가 눈�
 | 키 | 동작 |
 |---|---|
 | `Ctrl`+`Alt`+`B` | 조절 창 열기 / 숨기기 |
+| `Ctrl`+`Alt`+`P` | Shift 화면 끄기 / 켜기 |
 | `Ctrl`+`Alt`+`]` / `[` | 감마 +0.05 / −0.05 |
 | `Ctrl`+`Alt`+`=` / `-` | 밝기 배율 +0.05 / −0.05 |
 | `Ctrl`+`Alt`+`.` / `,` | 채도 +5 / −5 |
@@ -73,6 +75,7 @@ Owl3D Shift는 Live 3D를 켜면 흰색은 그대로인데 중간 밝기가 눈�
   창 아래에 빨간 경고가 뜨고 적용되지 않습니다. 하나를 1.00 쪽으로 되돌리면 됩니다.
 - **채도는 NVIDIA 그래픽에서만** 됩니다(드라이버의 디지털 바이브런스 사용). 다른 그래픽에서는 슬라이더가 비활성입니다.
 - 보정은 화면 전체에 걸립니다. 영상 부분만 밝히지는 못합니다.
+- 화면 끄기는 모니터에 전원 명령(DDC/CI)을 보내는 방식입니다. 꺼진 동안에는 창이 보이지 않으니 켤 때는 단축키를 쓰세요. 프로그램이 실행 중이어야 단축키가 동작하고, 안 켜지면 케이블을 뺐다 꽂으면 됩니다.
 - 설정: `%LOCALAPPDATA%\Owl3D\owl3d-3d-brightness.ini`, 기록: 같은 폴더의 `owl3d-3d-brightness.log`
 - 실행 옵션: `--hidden`(트레이로만 시작), `--lang en` / `--lang ko`(언어 강제)
 
@@ -120,6 +123,7 @@ bright and washed out. This tool applies its correction **only while 3D is runni
 | Remembers values | Settings are kept for the next run. |
 | Tray app | Keeps running after the window is closed; optional start at login. |
 | Safe restore | If the PC shuts down while the correction is active, the original picture is restored at next start. |
+| Screen off / on | The Shift has no power button. A hotkey or button turns its screen off and back on. |
 | Korean / English | Follows the Windows display language. |
 | No installer | A single exe. |
 
@@ -131,6 +135,7 @@ the correction is applied 4–5 seconds later and removed 2–3 seconds after 3D
 | Keys | Action |
 |---|---|
 | `Ctrl`+`Alt`+`B` | Show / hide the window |
+| `Ctrl`+`Alt`+`P` | Shift screen off / on |
 | `Ctrl`+`Alt`+`]` / `[` | Gamma +0.05 / −0.05 |
 | `Ctrl`+`Alt`+`=` / `-` | Gain +0.05 / −0.05 |
 | `Ctrl`+`Alt`+`.` / `,` | Saturation +5 / −5 |
@@ -144,5 +149,6 @@ the correction is applied 4–5 seconds later and removed 2–3 seconds after 3D
   window shows a red warning and nothing is applied; move one of them back towards 1.00.
 - Saturation needs an NVIDIA output. On other graphics the slider is disabled.
 - The correction covers the whole screen, not only the video area.
+- Screen off uses a monitor power command (DDC/CI). While the screen is off, use the hotkey to turn it back on; the tool must be running. If it does not come back, replug the cable.
 - Settings: `%LOCALAPPDATA%\Owl3D\owl3d-3d-brightness.ini`. Options: `--hidden`, `--lang en`, `--lang ko`.
 - Requires Windows 10/11 (.NET Framework 4, included with Windows).
