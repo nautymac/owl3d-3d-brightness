@@ -7,6 +7,18 @@ A small tray tool for the Owl3D Shift display. While Owl3D Live 3D is running it
 gamma, saturation and contrast, and restores the original picture when 3D stops.
 The window is Korean on a Korean Windows and English otherwise.
 
+Monitor targeting: gamma, gain, contrast, NVIDIA saturation and the hotkey overlay
+use the active Shift identified as `RTK2700` or `RTK0143`, including when it is a
+secondary monitor. Correction pauses if no Shift or multiple Shifts are detected;
+it does not fall back to the primary display. The power toggle retains its existing
+DDC/CI behavior. Legacy saturation restore values without a display identity are
+discarded because they may belong to another monitor.
+
+To verify monitor targeting after building, exit the tray app and run
+`powershell -ExecutionPolicy Bypass -File tools/verify-monitor-target.ps1`.
+This briefly applies a mild gamma/saturation change, checks that other outputs
+remain unchanged, and restores the Shift's captured settings in a `finally` block.
+
 Owl3D 프로그램 자체는 건드리지 않습니다. Owl3D와 관련 없는 개인 도구이며 Owl3D 회사가 만들거나 지원하는 것이 아닙니다.
 
 [English](#english)
