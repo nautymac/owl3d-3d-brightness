@@ -18,8 +18,8 @@ static class Native
 {
     [DllImport("gdi32.dll")] public static extern bool SetDeviceGammaRamp(IntPtr hdc, ushort[] ramp);
     [DllImport("gdi32.dll")] public static extern bool GetDeviceGammaRamp(IntPtr hdc, ushort[] ramp);
-    [DllImport("user32.dll")] public static extern IntPtr GetDC(IntPtr h);
-    [DllImport("user32.dll")] public static extern int ReleaseDC(IntPtr h, IntPtr dc);
+    [DllImport("gdi32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr CreateDC(string driver, string device, string output, IntPtr mode);
+    [DllImport("gdi32.dll")] public static extern bool DeleteDC(IntPtr dc);
     [DllImport("user32.dll")] public static extern bool RegisterHotKey(IntPtr hWnd, int id, uint mods, uint vk);
     [DllImport("user32.dll")] public static extern bool UnregisterHotKey(IntPtr hWnd, int id);
     public const uint MOD_ALT = 1, MOD_CONTROL = 2, MOD_NOREPEAT = 0x4000;
@@ -74,7 +74,10 @@ class Osd : Form
     public void ShowText(string text)
     {
         l.Text = text;
-        var wa = Screen.PrimaryScreen.WorkingArea;
+        string device = ShiftPower.FindDeviceName();
+        var screen = Array.Find(Screen.AllScreens, x => string.Equals(x.DeviceName, device, StringComparison.OrdinalIgnoreCase));
+        if (screen == null) return;
+        var wa = screen.WorkingArea;
         Location = new Point(wa.Left + (wa.Width - Width) / 2, wa.Top + 60);
         if (!Visible) Show(); t.Stop(); t.Start();
     }
@@ -152,6 +155,7 @@ class Settings
     public double Gamma = 0.7, Gain = 1.4, Contrast = 1.0;
     public int Sat = 70;          // NVIDIA digital vibrance level while 3D is on (driver default is 50)
     public int SatRestore = -1;   // level to put back when 3D stops; -1 = nothing applied
+    public string SatRestoreDevice = "";
     // user-editable "Default" preset, in slider units (gamma/gain/contrast x100)
     public int DefGamma = 70, DefGain = 140, DefCon = 100, DefSat = 70;
     public static string Dir { get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Owl3D"); } }
@@ -166,6 +170,7 @@ class Settings
             {
                 var kv = line.Split('=');
                 if (kv.Length != 2) continue;
+                if (kv[0].Trim() == "saturation_restore_device") { SatRestoreDevice = kv[1].Trim(); continue; }
                 double v;
                 if (!double.TryParse(kv[1].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out v)) continue;
                 switch (kv[0].Trim())
@@ -191,7 +196,7 @@ class Settings
             Directory.CreateDirectory(Dir);
             var c = CultureInfo.InvariantCulture;
             File.WriteAllText(File_, "gamma=" + Gamma.ToString("0.00", c) + "\r\ngain=" + Gain.ToString("0.00", c)
-                + "\r\ncontrast=" + Contrast.ToString("0.00", c) + "\r\nsaturation=" + Sat + "\r\nsaturation_restore=" + SatRestore
+                + "\r\ncontrast=" + Contrast.ToString("0.00", c) + "\r\nsaturation=" + Sat + "\r\nsaturation_restore=" + SatRestore + "\r\nsaturation_restore_device=" + SatRestoreDevice
                 + "\r\ndefault_gamma=" + (DefGamma / 100.0).ToString("0.00", c) + "\r\ndefault_gain=" + (DefGain / 100.0).ToString("0.00", c)
                 + "\r\ndefault_contrast=" + (DefCon / 100.0).ToString("0.00", c) + "\r\ndefault_saturation=" + DefSat + "\r\n");
         }
@@ -230,14 +235,19 @@ static class Ramp
     }
     public static bool Apply(ushort[] r)
     {
-        IntPtr dc = Native.GetDC(IntPtr.Zero);
-        try { return Native.SetDeviceGammaRamp(dc, r); } finally { Native.ReleaseDC(IntPtr.Zero, dc); }
+        string device = ShiftPower.FindDeviceName();
+        if (device == null) return false;
+        IntPtr dc = Native.CreateDC(device, device, null, IntPtr.Zero);
+        if (dc == IntPtr.Zero) return false;
+        try { return Native.SetDeviceGammaRamp(dc, r); } finally { Native.DeleteDC(dc); }
     }
     public static int Read128()
     {
-        var r = new ushort[768]; IntPtr dc = Native.GetDC(IntPtr.Zero);
-        try { Native.GetDeviceGammaRamp(dc, r); } finally { Native.ReleaseDC(IntPtr.Zero, dc); }
-        return r[128];
+        string device = ShiftPower.FindDeviceName();
+        if (device == null) return -1;
+        var r = new ushort[768]; IntPtr dc = Native.CreateDC(device, device, null, IntPtr.Zero);
+        if (dc == IntPtr.Zero) return -1;
+        try { return Native.GetDeviceGammaRamp(dc, r) ? r[128] : -1; } finally { Native.DeleteDC(dc); }
     }
     public static bool Is3DOn() { return Process.GetProcessesByName("display-mirror").Length > 0; }
 }
@@ -249,13 +259,27 @@ static class Nv
     [DllImport("nvapi64.dll", EntryPoint = "nvapi_QueryInterface", CallingConvention = CallingConvention.Cdecl)] static extern IntPtr QI(uint id);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int InitD();
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int EnumD(int i, out IntPtr h);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int NameD(IntPtr h, [Out] System.Text.StringBuilder name);
     [StructLayout(LayoutKind.Sequential)] struct DVCEX { public uint version; public int cur, min, max, def; }
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int DvcD(IntPtr h, int outputId, ref DVCEX info);
-    static EnumD en; static DvcD get, set; static bool tried;
+    static EnumD en; static NameD name; static DvcD get, set; static bool tried;
     public static bool Available; public static int Min = 0, Max = 100, Default = 50;
 
     static T F<T>(uint id) where T : class { IntPtr p = QI(id); return p == IntPtr.Zero ? null : (T)(object)Marshal.GetDelegateForFunctionPointer(p, typeof(T)); }
     static DVCEX New() { var d = new DVCEX(); d.version = (uint)(Marshal.SizeOf(typeof(DVCEX)) | 0x10000); return d; }
+    static bool FindHandle(out IntPtr h)
+    {
+        h = IntPtr.Zero;
+        string device = ShiftPower.FindDeviceName();
+        if (device == null || en == null || name == null) return false;
+        for (int i = 0; i < 64; i++)
+        {
+            IntPtr candidate; if (en(i, out candidate) != 0) break;
+            var text = new System.Text.StringBuilder(64);
+            if (name(candidate, text) == 0 && string.Equals(text.ToString(), device, StringComparison.OrdinalIgnoreCase)) { h = candidate; return true; }
+        }
+        return false;
+    }
     public static void Init()
     {
         if (tried) return; tried = true;
@@ -263,8 +287,9 @@ static class Nv
         {
             var init = F<InitD>(0x0150E828); if (init == null || init() != 0) return;
             en = F<EnumD>(0x9ABDD40D); get = F<DvcD>(0x0E45002D); set = F<DvcD>(0x4A82C2B1);
-            if (en == null || get == null || set == null) return;
-            IntPtr h; if (en(0, out h) != 0) return;
+            name = F<NameD>(0x22A78B05);
+            if (en == null || name == null || get == null || set == null) return;
+            IntPtr h; if (!FindHandle(out h)) return;
             var d = New(); if (get(h, 0, ref d) != 0) return;
             Min = d.min; Max = d.max; Default = d.def; Available = true;
         }
@@ -273,12 +298,12 @@ static class Nv
     public static int Get()
     {
         if (!Available) return -1;
-        try { IntPtr h; if (en(0, out h) != 0) return -1; var d = New(); return get(h, 0, ref d) == 0 ? d.cur : -1; } catch { return -1; }
+        try { IntPtr h; if (!FindHandle(out h)) return -1; var d = New(); return get(h, 0, ref d) == 0 ? d.cur : -1; } catch { return -1; }
     }
     public static bool Set(int level)
     {
         if (!Available) return false;
-        try { IntPtr h; if (en(0, out h) != 0) return false; var d = New(); d.cur = Math.Max(Min, Math.Min(Max, level)); return set(h, 0, ref d) == 0; } catch { return false; }
+        try { IntPtr h; if (!FindHandle(out h)) return false; var d = New(); d.cur = Math.Max(Min, Math.Min(Max, level)); return set(h, 0, ref d) == 0; } catch { return false; }
     }
 }
 
@@ -320,6 +345,21 @@ static class ShiftPower
         return false;
     }
 
+    // Share the power button's hardware identification with gamma and NVIDIA saturation.
+    // Never substitute the primary display when the Shift is missing or ambiguous.
+    public static string FindDeviceName()
+    {
+        string device = null; int count = 0;
+        bool ok = EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, (IntPtr hm, IntPtr hdc, ref RECT r, IntPtr d) =>
+        {
+            if (!IsShift(hm)) return true;
+            var mi = new MONITORINFOEX(); mi.cb = Marshal.SizeOf(typeof(MONITORINFOEX));
+            if (GetMonitorInfo(hm, ref mi)) { device = mi.dev; count++; }
+            return true;
+        }, IntPtr.Zero);
+        return ok && count == 1 ? device : null;
+    }
+
     // Returns: 1 = turned on, 0 = turned off, -1 = no monitor accepted the command.
     public static int Toggle(out string detail)
     {
@@ -359,8 +399,11 @@ class MainForm : Form
     public MainForm()
     {
         s.Load(); Nv.Init();
+        // Older builds saved the first NVIDIA output's value without identifying it.
+        if (s.SatRestore >= 0 && s.SatRestoreDevice != ShiftPower.FindDeviceName())
+        { Log("discarded saturation restore for a different/unknown display"); s.SatRestore = -1; s.SatRestoreDevice = ""; s.Save(); }
         // a previous run ended (crash / power off) while saturation was applied: put the original level back
-        if (Nv.Available && s.SatRestore >= 0 && !Ramp.Is3DOn()) { Nv.Set(s.SatRestore); Log("startup: restored saturation " + s.SatRestore); s.SatRestore = -1; s.Save(); }
+        if (Nv.Available && s.SatRestore >= 0 && !Ramp.Is3DOn()) RestoreSat();
         Text = T.L("Owl3D 3D 밝기 조절", "Owl3D 3D Brightness"); TopMost = true; StartPosition = FormStartPosition.Manual;
         Location = new Point(40, 40); ClientSize = new Size(560, 488); FormBorderStyle = FormBorderStyle.FixedToolWindow;
         Font = new Font(T.L("Malgun Gothic", "Segoe UI"), T.Ko ? 10f : 9.5f);
@@ -417,7 +460,7 @@ class MainForm : Form
         tray.ContextMenu = menu; tray.DoubleClick += (o, e) => ShowWindow();
 
         poll = new System.Windows.Forms.Timer { Interval = 2000 }; poll.Tick += (o, e) => Poll(); poll.Start();
-        RefreshLabels(); Log("start gamma=" + s.Gamma + " gain=" + s.Gain + " contrast=" + s.Contrast + " saturation=" + s.Sat + " nvidia=" + Nv.Available);
+        RefreshLabels(); Log("start display=" + (ShiftPower.FindDeviceName() ?? "Shift not found") + " gamma=" + s.Gamma + " gain=" + s.Gain + " contrast=" + s.Contrast + " saturation=" + s.Sat + " nvidia=" + Nv.Available);
     }
 
     // the "Default" preset (slider units: x100 except saturation); shown next to each value in the window
@@ -500,7 +543,7 @@ class MainForm : Form
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
         if (!reallyExit && e.CloseReason == CloseReason.UserClosing) { e.Cancel = true; Hide(); Native.Balloon(tray, bigIcon, T.L("Owl3D 3D 밝기", "Owl3D 3D Brightness"), T.L("트레이에서 계속 동작합니다. 종료는 트레이 아이콘 우클릭.", "Still running in the tray. Right-click the tray icon to exit.")); return; }
-        poll.Stop(); if (applied) ResetNow(); tray.Visible = false;
+        poll.Stop(); if (applied || s.SatRestore >= 0) ResetNow(); tray.Visible = false;
         for (int id = 1; id <= HK_LAST; id++) Native.UnregisterHotKey(Handle, id);
         base.OnFormClosing(e);
     }
@@ -516,6 +559,8 @@ class MainForm : Form
             ? string.Format(T.L("색 진하기(채도): {0}   [기본 {1}]   {2} = 없음, 높을수록 진하게", "Saturation: {0}   [default {1}]   {2} = none, higher = more vivid"), ts.Value, DEF_SAT, Nv.Default)
             : T.L("색 진하기(채도): NVIDIA 그래픽 출력에서만 쓸 수 있습니다", "Saturation: only available on NVIDIA outputs");
         int dev = Ramp.MaxDeviation(g, k, c); double mid = Ramp.Build(g, k, c)[128] / 655.35;
+        if (ShiftPower.FindDeviceName() == null)
+        { st.ForeColor = Color.Firebrick; st.Text = T.L("Shift 화면을 찾지 못했습니다. 다른 화면에는 보정하지 않습니다.", "Shift display not found or multiple Shifts detected. Correction is paused."); return; }
         // Windows refuses ramps further than 128 levels from the original; say so in plain words only when it happens
         if (dev > 128) { st.ForeColor = Color.Firebrick; st.Text = T.L("보정이 너무 강해서 Windows가 받아주지 않습니다. 감마·밝기·대비 중 하나를 1.00 쪽으로 조금 되돌리세요.", "Too strong for Windows to accept. Move gamma, gain or contrast a little back towards 1.00."); }
         else { st.ForeColor = Color.Black; st.Text = Ramp.Is3DOn() ? T.L("Live 3D 켜짐 — 지금 화면에 적용 중입니다.", "Live 3D is on — applied to the screen now.") : T.L("Live 3D 꺼짐 — 3D를 켜면 이 값이 적용됩니다.", "Live 3D is off — these values apply when 3D starts."); }
@@ -533,14 +578,15 @@ class MainForm : Form
     {
         if (!Nv.Available) return;
         int cur = Nv.Get(); if (cur < 0 || cur == s.Sat) return;
-        if (s.SatRestore < 0) { s.SatRestore = cur; s.Save(); }   // remember what to put back, even across a crash
+        if (s.SatRestore < 0) { s.SatRestore = cur; s.SatRestoreDevice = ShiftPower.FindDeviceName(); s.Save(); }   // remember what to put back, even across a crash
         Log("saturation " + cur + " -> " + s.Sat + " ok=" + Nv.Set(s.Sat));
     }
     void RestoreSat()
     {
-        if (!Nv.Available || s.SatRestore < 0) return;
-        Log("saturation restore -> " + s.SatRestore + " ok=" + Nv.Set(s.SatRestore));
-        s.SatRestore = -1; s.Save();
+        if (!Nv.Available || s.SatRestore < 0 || s.SatRestoreDevice != ShiftPower.FindDeviceName()) return;
+        bool ok = Nv.Set(s.SatRestore);
+        Log("saturation restore -> " + s.SatRestore + " ok=" + ok);
+        if (ok) { s.SatRestore = -1; s.SatRestoreDevice = ""; s.Save(); }
     }
     void ResetNow()
     {
@@ -555,6 +601,8 @@ class MainForm : Form
     }
     void Poll()
     {
+        if (ShiftPower.FindDeviceName() == null)
+        { if (Visible) RefreshLabels(); return; }
         bool on = Ramp.Is3DOn();
         if (on && !applied)
         {
@@ -566,7 +614,7 @@ class MainForm : Form
             if (Ramp.Read128() != target128) { Log("ramp changed while 3D on -> re-applying"); ApplyNow(); }
             else if (Nv.Available && Nv.Get() != s.Sat) ApplySat();
         }
-        else if (!on) { onSince = DateTime.MinValue; if (applied || s.SatRestore >= 0 || Ramp.Read128() != Ramp.Identity128) ResetNow(); }
+        else if (!on) { onSince = DateTime.MinValue; int current = Ramp.Read128(); if (applied || s.SatRestore >= 0 || (current >= 0 && current != Ramp.Identity128)) ResetNow(); }
         if (Visible) RefreshLabels();
     }
 
